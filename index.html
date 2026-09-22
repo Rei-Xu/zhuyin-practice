@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>注音打字小勇士</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== 首頁 ===== -->
+<section id="screen-home" class="screen active">
+  <button id="btn-teacher" class="gear" title="老師模式">⚙</button>
+  <h1 class="title">⌨️ 注音打字小勇士</h1>
+  <p class="subtitle">用真正的注音輸入法，一關一關練習！</p>
+  <div id="level-list" class="level-list"></div>
+  <div class="home-actions">
+    <button id="btn-demo" class="btn secondary">🖥 示範鍵盤（老師投影用）</button>
+  </div>
+  <p class="tip">請用 Edge 或 Chrome 開啟，並確認輸入法是「微軟注音」。</p>
+</section>
+
+<!-- ===== 遊戲畫面 ===== -->
+<section id="screen-game" class="screen">
+  <header class="game-header">
+    <button id="btn-quit" class="btn small">← 回首頁</button>
+    <div id="level-name" class="level-name"></div>
+    <div class="game-stats">
+      <span id="progress">1 / 10</span>
+      <span id="timer" class="timer hidden">⏱ 0 秒</span>
+      <span id="mode-badge" class="mode-badge unknown">輸入法：？</span>
+    </div>
+  </header>
+
+  <div id="capslock-warn" class="warn hidden">⚠️ Caps Lock 亮著！請按一下 Caps Lock 關掉，不然會一直打英文。</div>
+
+  <div class="task-area">
+    <div id="task-instruction" class="task-instruction"></div>
+    <div id="target-tiles" class="target-tiles"></div>
+    <div id="key-guide" class="key-guide"></div>
+    <div id="composing" class="composing"></div>
+    <div id="hint" class="hint"></div>
+  </div>
+
+  <div class="input-wrap">
+    <input id="ime-box" type="text" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="在這裡打字">
+    <div id="focus-cover" class="focus-cover hidden">👆 點一下這裡開始打字</div>
+  </div>
+
+  <div id="keyboard" class="keyboard"></div>
+</section>
+
+<!-- ===== 結算畫面 ===== -->
+<section id="screen-result" class="screen">
+  <h1 class="title">🎉 闖關完成！</h1>
+  <div id="result-level" class="result-level"></div>
+  <div id="result-stars" class="stars"></div>
+  <div class="result-grid">
+    <div class="result-item"><div class="label">答對</div><div id="r-correct" class="value">0</div></div>
+    <div class="result-item"><div class="label">錯誤次數</div><div id="r-wrong" class="value">0</div></div>
+    <div class="result-item"><div class="label">正確率</div><div id="r-acc" class="value">0%</div></div>
+    <div class="result-item"><div class="label">時間</div><div id="r-time" class="value">0 秒</div></div>
+  </div>
+  <div id="record-box" class="record-box">
+    <p>老師要記錄成績嗎？請輸入座號或姓名：</p>
+    <input id="record-name" type="text" placeholder="例如：15 或 15 王小明" autocomplete="off">
+    <div class="home-actions">
+      <button id="btn-save-record" class="btn">💾 記錄成績</button>
+      <button id="btn-skip-record" class="btn secondary">跳過</button>
+    </div>
+    <p id="record-msg" class="tip"></p>
+  </div>
+  <div class="home-actions">
+    <button id="btn-retry" class="btn">🔁 再玩一次</button>
+    <button id="btn-next-level" class="btn">➡ 下一關</button>
+    <button id="btn-result-home" class="btn secondary">🏠 回首頁</button>
+  </div>
+</section>
+
+<!-- ===== 示範鍵盤（老師投影） ===== -->
+<section id="screen-demo" class="screen">
+  <header class="game-header">
+    <button id="btn-demo-quit" class="btn small">← 回首頁</button>
+    <div class="level-name">示範鍵盤</div>
+    <div class="game-stats"><span id="demo-mode-badge" class="mode-badge unknown">輸入法：？</span></div>
+  </header>
+  <div class="demo-display">
+    <div id="demo-committed" class="demo-committed"></div>
+    <div id="demo-composing" class="demo-composing"></div>
+    <div id="demo-lastkey" class="demo-lastkey"></div>
+  </div>
+  <div class="input-wrap">
+    <input id="demo-box" type="text" autocomplete="off" spellcheck="false" placeholder="老師在這裡打字，學生看鍵盤">
+    <div id="demo-cover" class="focus-cover hidden">👆 點一下這裡開始打字</div>
+  </div>
+  <div id="demo-keyboard" class="keyboard"></div>
+  <div class="home-actions">
+    <button id="btn-demo-clear" class="btn secondary">清空</button>
+  </div>
+</section>
+
+<!-- ===== 老師模式 ===== -->
+<section id="screen-teacher" class="screen">
+  <header class="game-header">
+    <button id="btn-teacher-quit" class="btn small">← 回首頁</button>
+    <div class="level-name">老師模式</div>
+    <div></div>
+  </header>
+  <div class="teacher-panel">
+    <h2>設定</h2>
+    <div id="settings-form" class="settings-form"></div>
+    <div class="home-actions">
+      <button id="btn-save-settings" class="btn">儲存設定</button>
+      <button id="btn-reset-settings" class="btn secondary">恢復預設</button>
+      <span id="settings-msg" class="tip"></span>
+    </div>
+
+    <h2>成績記錄（只存在這台電腦）</h2>
+    <div class="home-actions">
+      <button id="btn-export-csv" class="btn">⬇ 匯出 CSV</button>
+      <button id="btn-clear-records" class="btn danger">🗑 清空記錄</button>
+    </div>
+    <div class="table-wrap">
+      <table id="records-table">
+        <thead><tr><th>日期</th><th>座號／姓名</th><th>關卡</th><th>答對</th><th>錯誤</th><th>正確率</th><th>時間</th><th>星星</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 過關／答對的動畫覆蓋層 -->
+<div id="flash" class="flash hidden"></div>
+
+<script src="words.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
