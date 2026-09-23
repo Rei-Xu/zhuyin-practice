@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>注音打字小勇士</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20260923b">
 </head>
 <body>
 
@@ -129,10 +129,81 @@
   </div>
 </section>
 
+<!-- ===== 注音塔防（挑戰模式） ===== -->
+<section id="screen-td" class="screen">
+  <header class="game-header">
+    <button id="btn-td-quit" class="btn small">← 回首頁</button>
+    <div class="level-name">🏰 注音塔防</div>
+    <div class="game-stats">
+      <span id="td-wave">第 1 波</span>
+      <span id="td-hearts" class="td-hearts"></span>
+      <span id="td-score">0 分</span>
+      <span id="td-combo" class="td-combo"></span>
+      <span id="td-mode-badge" class="mode-badge unknown">輸入法：？</span>
+    </div>
+  </header>
+
+  <div id="td-field" class="td-field">
+    <div class="td-castle" id="td-castle">🏰</div>
+    <div id="td-lane" class="td-lane"></div>
+    <div id="td-banner" class="td-banner hidden"></div>
+    <button id="btn-td-pause" class="btn small td-pause">⏸ 暂停</button>
+  </div>
+
+  <div id="td-bossbar" class="td-bossbar hidden">
+    <span class="td-bossbar-name">👹 大魔王</span>
+    <span id="td-boss-hp" class="td-boss-hp"></span>
+    <span id="td-boss-time" class="td-boss-time">⏱ 90</span>
+  </div>
+
+  <div class="td-target">
+    <div id="td-target-word" class="td-target-word">　</div>
+    <div id="td-target-keys" class="key-guide"></div>
+    <div id="td-hint" class="hint"></div>
+  </div>
+
+  <div class="input-wrap">
+    <input id="td-box" type="text" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="在這裡打注音">
+    <div id="td-cover" class="focus-cover hidden">👆 點一下這裡開始打字</div>
+  </div>
+
+  <div id="td-keyboard" class="keyboard"></div>
+</section>
+
+<!-- ===== 塔防結算 ===== -->
+<section id="screen-td-result" class="screen">
+  <h1 id="td-result-title" class="title">🏰 城牆倒了！</h1>
+  <div id="td-result-sub" class="result-level"></div>
+  <div class="result-grid">
+    <div class="result-item"><div class="label">分數</div><div id="td-r-score" class="value">0</div></div>
+    <div class="result-item"><div class="label">消滅怪獸</div><div id="td-r-killed" class="value">0</div></div>
+    <div class="result-item"><div class="label">撐到第幾波</div><div id="td-r-wave" class="value">1</div></div>
+    <div class="result-item"><div class="label">最高連擊</div><div id="td-r-combo" class="value">0</div></div>
+    <div class="result-item"><div class="label">打錯次數</div><div id="td-r-wrong" class="value">0</div></div>
+    <div class="result-item"><div class="label">最高紀錄</div><div id="td-r-best" class="value">0</div></div>
+  </div>
+  <div id="td-record-box" class="record-box">
+    <p>老師要記錄成績嗎？請輸入座號或姓名：</p>
+    <input id="td-record-name" type="text" placeholder="例如：15 或 15 王小明" autocomplete="off">
+    <div class="home-actions">
+      <button id="btn-td-save-record" class="btn">💾 記錄成績</button>
+      <button id="btn-td-skip-record" class="btn secondary">跳過</button>
+    </div>
+    <p id="td-record-msg" class="tip"></p>
+  </div>
+  <div class="home-actions">
+    <button id="btn-td-again" class="btn">🔁 再打一場</button>
+    <button id="btn-td-result-home" class="btn secondary">🏠 回首頁</button>
+  </div>
+</section>
+
 <!-- 過關／答對的動畫覆蓋層 -->
 <div id="flash" class="flash hidden"></div>
 
-<script src="words.js"></script>
-<script src="app.js"></script>
+<!-- ※ 改過程式並上傳 GitHub 後，請把下面所有 ?v=20260923b 改成新的日期，學生電腦才不會拿到快取的舊版 -->
+<script src="words.js?v=20260923b"></script>
+<script src="core.js?v=20260923b"></script>
+<script src="app.js?v=20260923b"></script>
+<script src="td.js?v=20260923b"></script>
 </body>
 </html>

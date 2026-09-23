@@ -5,54 +5,12 @@
 (function () {
   'use strict';
 
-  // ---------- 鍵盤配置（標準注音排列）：[code, 英文標示, 注音/功能標示, 尺寸class] ----------
-  const ROWS = [
-    [['Backquote', '`', ''], ['Digit1', '1', 'ㄅ'], ['Digit2', '2', 'ㄉ'], ['Digit3', '3', 'ˇ'], ['Digit4', '4', 'ˋ'],
-     ['Digit5', '5', 'ㄓ'], ['Digit6', '6', 'ˊ'], ['Digit7', '7', '˙'], ['Digit8', '8', 'ㄚ'], ['Digit9', '9', 'ㄞ'],
-     ['Digit0', '0', 'ㄢ'], ['Minus', '-', 'ㄦ'], ['Equal', '=', ''], ['Backspace', '', '← 刪除', 'wide']],
-    [['Tab', 'Tab', '', 'wide'], ['KeyQ', 'Q', 'ㄆ'], ['KeyW', 'W', 'ㄊ'], ['KeyE', 'E', 'ㄍ'], ['KeyR', 'R', 'ㄐ'],
-     ['KeyT', 'T', 'ㄔ'], ['KeyY', 'Y', 'ㄗ'], ['KeyU', 'U', 'ㄧ'], ['KeyI', 'I', 'ㄛ'], ['KeyO', 'O', 'ㄟ'],
-     ['KeyP', 'P', 'ㄣ'], ['BracketLeft', '[', ''], ['BracketRight', ']', ''], ['Backslash', '\\', '']],
-    [['CapsLock', '', 'Caps Lock', 'wide'], ['KeyA', 'A', 'ㄇ'], ['KeyS', 'S', 'ㄋ'], ['KeyD', 'D', 'ㄎ'], ['KeyF', 'F', 'ㄑ'],
-     ['KeyG', 'G', 'ㄕ'], ['KeyH', 'H', 'ㄘ'], ['KeyJ', 'J', 'ㄨ'], ['KeyK', 'K', 'ㄜ'], ['KeyL', 'L', 'ㄠ'],
-     ['Semicolon', ';', 'ㄤ'], ['Quote', "'", ''], ['Enter', '', 'Enter 送出', 'wider']],
-    [['ShiftLeft', '', 'Shift 切換中/英', 'wider'], ['KeyZ', 'Z', 'ㄈ'], ['KeyX', 'X', 'ㄌ'], ['KeyC', 'C', 'ㄏ'], ['KeyV', 'V', 'ㄒ'],
-     ['KeyB', 'B', 'ㄖ'], ['KeyN', 'N', 'ㄙ'], ['KeyM', 'M', 'ㄩ'], ['Comma', ',', 'ㄝ'], ['Period', '.', 'ㄡ'],
-     ['Slash', '/', 'ㄥ'], ['ShiftRight', '', 'Shift 切換中/英', 'wider']],
-    [['ControlLeft', '', 'Ctrl', 'wide'], ['Space', '', '空白鍵（一聲）', 'space'], ['ArrowDown', '', '↓ 選字', 'wide']],
-  ];
-  const ZHUYIN_RE = /[ㄅ-ㄩ]/;
-  const TONE_MARKS = 'ˊˇˋ˙';
-  const TONE_KEY = { 'ˉ': 'Space', 'ˊ': 'Digit6', 'ˇ': 'Digit3', 'ˋ': 'Digit4', '˙': 'Digit7' };
-  const ZHUYIN_KEY = {};   // 注音符號 → code
-  const CODE_INFO = {};    // code → {en, label}
-  ROWS.forEach(r => r.forEach(([code, en, label]) => {
-    CODE_INFO[code] = { en, label };
-    if (ZHUYIN_RE.test(label) || TONE_MARKS.includes(label)) ZHUYIN_KEY[label] = code;
-  }));
-  const MODIFIERS = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'CapsLock', 'MetaLeft', 'MetaRight', 'Tab']);
-
-  // 注音字串 → 依打字順序的按鍵清單（符號…然後聲調鍵）
-  function keySeq(zy) {
-    const seq = [];
-    let tone = 'ˉ';
-    for (const ch of zy) {
-      if (ZHUYIN_RE.test(ch)) seq.push({ code: ZHUYIN_KEY[ch], label: ch });
-      else if (TONE_MARKS.includes(ch)) tone = ch;
-    }
-    seq.push({ code: TONE_KEY[tone], label: tone === 'ˉ' ? '空白' : tone, tone: true });
-    return seq;
-  }
-  function codeLabel(code) {
-    const info = CODE_INFO[code];
-    if (!info) return code;
-    if (code === 'Space') return '空白鍵';
-    if (code === 'Enter') return 'Enter';
-    if (code === 'Backspace') return 'Backspace';
-    if (code === 'ArrowDown') return '↓';
-    if (code.startsWith('Shift')) return 'Shift';
-    return info.en.toLowerCase() + (info.label ? `(${info.label})` : '');
-  }
+  // ---------- 共用核心（core.js）----------
+  const ZY = window.ZY;
+  const { ZHUYIN_RE, TONE_MARKS, TONE_KEY, ZHUYIN_KEY, CODE_INFO, MODIFIERS,
+          keySeq, codeLabel, renderKeyboard, keyEls, flashKey, setNextKey,
+          loadJSON, saveJSON, escapeHtml, shuffle, makePicker,
+          beep, playGood, playBad, playWin } = ZY;
 
   // ---------- 關卡 ----------
   const LEVELS = [
@@ -65,7 +23,6 @@
   const ALL_SYMBOLS = 'ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄧㄨㄩㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦ'.split('');
   const EN_WORDS = ['hi', 'ok', 'go', 'abc', 'yes', 'no', 'cat', 'dog'];
 
-  const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const bank = () => window.WORD_BANK || { chars: [], words: [], sentences: [] };
 
   function makeQuestions(level, n) {
@@ -80,43 +37,38 @@
       const first = ALL_SYMBOLS.slice(0, 4), rest = shuffle(ALL_SYMBOLS.slice(4));
       return first.concat(rest).slice(0, n).map(s => ({ kind: 'symbol', text: s }));
     }
-    const src = level.id === 2 ? bank().chars : level.id === 3 ? bank().words : bank().sentences;
-    const items = shuffle(src).slice(0, n);
+    // 用發牌器出題：同一次不重複，而且連玩好幾場也要把整個題庫走完一輪才會再遇到同一題
+    const items = picker(level.id).take(n);
     return items.map(w => ({ kind: 'text', text: w.text, zhuyin: w.zhuyin }));
+  }
+
+  // 每個題源一個發牌器，整個分頁共用（重玩不會重置）
+  const PICKERS = {};
+  function picker(levelId) {
+    if (!PICKERS[levelId]) {
+      const b = bank();
+      const src = levelId === 2 ? (b.chars || [])
+                : levelId === 3 ? (b.words || []).concat(b.words3 || [])   // 第 3 關：二字詞＋三字詞混著出
+                : (b.sentences || []);
+      PICKERS[levelId] = makePicker(src);
+    }
+    return PICKERS[levelId];
   }
 
   // ---------- 設定與記錄（localStorage，只存本機） ----------
   const LS_SETTINGS = 'zhuyinTrainer.settings', LS_RECORDS = 'zhuyinTrainer.records', LS_BEST = 'zhuyinTrainer.best';
-  const DEFAULT_SETTINGS = { n: { 0: 6, 1: 10, 2: 10, 3: 8, 4: 5 }, enabled: { 0: true, 1: true, 2: true, 3: true, 4: true }, timerAll: false, askName: true, sound: true };
-  function loadJSON(key, fallback) { try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; } catch (e) { return fallback; } }
-  function saveJSON(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* 無痕模式等情況忽略 */ } }
+  const DEFAULT_SETTINGS = { n: { 0: 6, 1: 10, 2: 10, 3: 8, 4: 5 }, enabled: { 0: true, 1: true, 2: true, 3: true, 4: true }, timerAll: false, askName: true, sound: true,
+    tdEnabled: true, tdSpeed: 'normal', tdHearts: 3, tdBoss: true, tdKeyHint: true };
   let settings = Object.assign({}, DEFAULT_SETTINGS, loadJSON(LS_SETTINGS, {}));
   settings.n = Object.assign({}, DEFAULT_SETTINGS.n, settings.n);
   settings.enabled = Object.assign({}, DEFAULT_SETTINGS.enabled, settings.enabled);
-
-  // ---------- 音效（Web Audio，不需外部檔案） ----------
-  let actx = null;
-  function beep(freq, dur, type, delay) {
-    if (!settings.sound) return;
-    try {
-      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-      const o = actx.createOscillator(), g = actx.createGain();
-      o.type = type || 'sine'; o.frequency.value = freq; o.connect(g); g.connect(actx.destination);
-      const t = actx.currentTime + (delay || 0);
-      g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      o.start(t); o.stop(t + dur);
-    } catch (e) { /* 忽略 */ }
-  }
-  const playGood = () => { beep(660, .12); beep(880, .2, 'sine', .1); };
-  const playBad = () => beep(180, .25, 'square');
-  const playWin = () => [523, 659, 784, 1047].forEach((f, i) => beep(f, .25, 'sine', i * .13));
+  ZY.setSound(settings.sound);
 
   // ---------- DOM ----------
   const $ = id => document.getElementById(id);
   const box = $('ime-box');
-  const screens = ['home', 'game', 'result', 'demo', 'teacher'];
   function showScreen(name) {
-    screens.forEach(s => $('screen-' + s).classList.toggle('active', s === name));
+    ZY.showScreen(name);
     if (name === 'game') setTimeout(() => box.focus(), 50);
     if (name === 'demo') setTimeout(() => $('demo-box').focus(), 50);
   }
@@ -151,31 +103,6 @@
     if (dbgOn) { dbgLines.length = 0; dbg('debug', '開啟（再按一次 F9 關閉）'); }
   });
 
-  function renderKeyboard(container) {
-    container.innerHTML = '';
-    ROWS.forEach(row => {
-      const div = document.createElement('div'); div.className = 'kb-row';
-      row.forEach(([code, en, label, size]) => {
-        const k = document.createElement('div');
-        k.className = 'key' + (size ? ' ' + size : '');
-        k.dataset.code = code;
-        const isZy = ZHUYIN_RE.test(label) || TONE_MARKS.includes(label);
-        const toneName = { 'ˊ': '二聲', 'ˇ': '三聲', 'ˋ': '四聲', '˙': '輕聲' }[label];
-        k.innerHTML = `<span class="en">${en}</span>` + (isZy ? `<span class="zy">${label}</span>` : `<span class="lbl">${label}</span>`) + (toneName ? `<span class="lbl tone">${toneName}</span>` : '');
-        if (!isZy && !label) k.classList.add('dim');
-        div.appendChild(k);
-      });
-      container.appendChild(div);
-    });
-  }
-  function keyEls(container, code) { return container.querySelectorAll(`.key[data-code="${code}"]`); }
-  function flashKey(container, code, cls) {
-    keyEls(container, code).forEach(k => { k.classList.add(cls); setTimeout(() => k.classList.remove(cls), 160); });
-  }
-  function setNextKey(container, code) {
-    container.querySelectorAll('.key.next').forEach(k => k.classList.remove('next'));
-    if (code) keyEls(container, code).forEach(k => k.classList.add('next'));
-  }
   function tempHighlight(container, code, ms) {
     keyEls(container, code).forEach(k => { k.classList.add('next'); setTimeout(() => { if (G.nextCode !== code) k.classList.remove('next'); }, ms); });
   }
@@ -478,7 +405,19 @@
       card.addEventListener('click', () => { beep(1, .01); startLevel(l); });
       list.appendChild(card);
     });
+    // 挑戰模式：注音塔防（td.js 載入後才會有 ZY.startTD）
+    if (settings.tdEnabled && typeof ZY.startTD === 'function') {
+      const tdBest = loadJSON(ZY.LS_TD_BEST, 0);
+      const card = document.createElement('div'); card.className = 'level-card td-card';
+      card.innerHTML = `<div class="num">挑戰模式</div><div class="name">🏰 注音塔防</div><div class="desc">打出注音消滅怪獸，最後打倒大魔王！</div><div class="best">${tdBest ? '最高 ' + tdBest + ' 分' : '　'}</div>`;
+      card.addEventListener('click', () => { beep(1, .01); ZY.startTD(); });
+      list.appendChild(card);
+    }
   }
+  // 給 td.js 回首頁用
+  ZY.goHome = () => { renderHome(); showScreen('home'); };
+  // td.js 比 app.js 晚載入，載完會呼叫這個把「注音塔防」卡片補上去
+  ZY.renderHome = renderHome;
 
   // ---------- 示範鍵盤（老師投影） ----------
   const dbox = $('demo-box'), dkb = $('demo-keyboard');
@@ -516,15 +455,30 @@
       <label>第 ${l.id} 關 題數 <input type="number" min="1" max="50" data-n="${l.id}" value="${settings.n[l.id]}"></label>`).join('') + `
       <label>每一關都顯示計時 <input type="checkbox" id="s-timer" ${settings.timerAll ? 'checked' : ''}></label>
       <label>結算時顯示「輸入姓名記錄」 <input type="checkbox" id="s-askname" ${settings.askName ? 'checked' : ''}></label>
-      <label>音效 <input type="checkbox" id="s-sound" ${settings.sound ? 'checked' : ''}></label>`;
+      <label>音效 <input type="checkbox" id="s-sound" ${settings.sound ? 'checked' : ''}></label>
+      <label class="sep">【挑戰模式：注音塔防】</label>
+      <label>開放塔防 <input type="checkbox" id="s-td-en" ${settings.tdEnabled ? 'checked' : ''}></label>
+      <label>起始速度
+        <select id="s-td-speed">
+          <option value="slow" ${settings.tdSpeed === 'slow' ? 'selected' : ''}>慢（三年級初學）</option>
+          <option value="normal" ${settings.tdSpeed === 'normal' ? 'selected' : ''}>中</option>
+          <option value="fast" ${settings.tdSpeed === 'fast' ? 'selected' : ''}>快（挑戰）</option>
+        </select></label>
+      <label>城牆心數 <input type="number" min="1" max="5" id="s-td-hearts" value="${settings.tdHearts}"></label>
+      <label>出現大魔王 <input type="checkbox" id="s-td-boss" ${settings.tdBoss ? 'checked' : ''}></label>
+      <label>螢幕鍵盤提示下一個鍵 <input type="checkbox" id="s-td-keyhint" ${settings.tdKeyHint ? 'checked' : ''}></label>`;
   }
   function renderRecords() {
     const recs = loadJSON(LS_RECORDS, []);
     const tb = $('records-table').querySelector('tbody');
-    tb.innerHTML = recs.length ? recs.slice().reverse().map(r => `<tr><td>${r.date}</td><td>${escapeHtml(r.name)}</td><td>第 ${r.level} 關 ${LEVELS[r.level] ? LEVELS[r.level].name : ''}</td><td>${r.correct}</td><td>${r.wrong}</td><td>${r.acc}%</td><td>${r.seconds} 秒</td><td>${'⭐'.repeat(r.stars)}</td></tr>`).join('')
+    tb.innerHTML = recs.length ? recs.slice().reverse().map(r => {
+      const isTd = r.mode === 'td';
+      const what = isTd ? `🏰 塔防（撐到第 ${r.wave} 波）` : `第 ${r.level} 關 ${LEVELS[r.level] ? LEVELS[r.level].name : ''}`;
+      const last = isTd ? `${r.score} 分` : '⭐'.repeat(r.stars);
+      return `<tr><td>${r.date}</td><td>${escapeHtml(r.name)}</td><td>${what}</td><td>${r.correct}</td><td>${r.wrong}</td><td>${r.acc}%</td><td>${r.seconds} 秒</td><td>${last}</td></tr>`;
+    }).join('')
       : '<tr><td colspan="8">還沒有任何記錄</td></tr>';
   }
-  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   $('btn-teacher').addEventListener('click', () => { renderSettingsForm(); renderRecords(); showScreen('teacher'); });
   $('btn-teacher-quit').addEventListener('click', () => { renderHome(); showScreen('home'); });
   $('btn-save-settings').addEventListener('click', () => {
@@ -532,15 +486,24 @@
     f.querySelectorAll('[data-en]').forEach(el => settings.enabled[el.dataset.en] = el.checked);
     f.querySelectorAll('[data-n]').forEach(el => settings.n[el.dataset.n] = Math.max(1, parseInt(el.value, 10) || 1));
     settings.timerAll = $('s-timer').checked; settings.askName = $('s-askname').checked; settings.sound = $('s-sound').checked;
+    settings.tdEnabled = $('s-td-en').checked;
+    settings.tdSpeed = $('s-td-speed').value;
+    settings.tdHearts = Math.min(5, Math.max(1, parseInt($('s-td-hearts').value, 10) || 3));
+    settings.tdBoss = $('s-td-boss').checked;
+    settings.tdKeyHint = $('s-td-keyhint').checked;
+    ZY.setSound(settings.sound);
     saveJSON(LS_SETTINGS, settings);
     $('settings-msg').textContent = '✅ 已儲存';
   });
   $('btn-reset-settings').addEventListener('click', () => {
-    settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)); saveJSON(LS_SETTINGS, settings); renderSettingsForm(); $('settings-msg').textContent = '已恢復預設';
+    settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)); saveJSON(LS_SETTINGS, settings); ZY.setSound(settings.sound); renderSettingsForm(); $('settings-msg').textContent = '已恢復預設';
   });
   $('btn-export-csv').addEventListener('click', () => {
     const recs = loadJSON(LS_RECORDS, []);
-    const rows = [['日期', '座號／姓名', '關卡', '答對', '錯誤', '正確率', '秒數', '星星']].concat(recs.map(r => [r.date, r.name, `第${r.level}關 ${LEVELS[r.level] ? LEVELS[r.level].name : ''}`, r.correct, r.wrong, r.acc + '%', r.seconds, r.stars]));
+    const rows = [['日期', '座號／姓名', '模式', '關卡／波次', '答對／消滅', '錯誤', '正確率', '秒數', '星星', '分數', '最高連擊']]
+      .concat(recs.map(r => r.mode === 'td'
+        ? [r.date, r.name, '塔防', `第${r.wave}波`, r.correct, r.wrong, r.acc + '%', r.seconds, '—', r.score, r.combo]
+        : [r.date, r.name, '闖關', `第${r.level}關 ${LEVELS[r.level] ? LEVELS[r.level].name : ''}`, r.correct, r.wrong, r.acc + '%', r.seconds, r.stars, '—', '—']));
     const csv = '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
