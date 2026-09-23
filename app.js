@@ -121,6 +121,36 @@
     if (name === 'demo') setTimeout(() => $('demo-box').focus(), 50);
   }
 
+  // ---------- 診斷紀錄（按 F9 開關）----------
+  // 真實的微軟注音行為沒辦法用程式模擬，若以後又出現怪的正確率，
+  // 請在遊戲畫面按 F9 打開這個紀錄，打一題後截圖給我。紀錄只存在畫面上，不會傳出去。
+  let dbgOn = false, dbgEl = null;
+  const dbgLines = [];
+  function dbgPanel() {
+    if (dbgEl) return dbgEl;
+    dbgEl = document.createElement('pre');
+    dbgEl.id = 'debug-log';
+    dbgEl.style.cssText = 'position:fixed;right:8px;bottom:8px;width:360px;height:220px;overflow:auto;' +
+      'background:rgba(0,0,0,.85);color:#7CFC98;font:12px/1.45 Consolas,monospace;padding:8px;' +
+      'border-radius:8px;z-index:9999;white-space:pre-wrap;margin:0';
+    document.body.appendChild(dbgEl);
+    return dbgEl;
+  }
+  function dbg(tag, info) {
+    if (!dbgOn) return;
+    dbgLines.push(tag + ' ' + info + '  [對' + G.correct + ' 錯' + G.wrong + ']');
+    if (dbgLines.length > 80) dbgLines.shift();
+    const el = dbgPanel();
+    el.textContent = dbgLines.join(String.fromCharCode(10));
+    el.scrollTop = el.scrollHeight;
+  }
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'F9') return;
+    dbgOn = !dbgOn;
+    dbgPanel().style.display = dbgOn ? 'block' : 'none';
+    if (dbgOn) { dbgLines.length = 0; dbg('debug', '開啟（再按一次 F9 關閉）'); }
+  });
+
   function renderKeyboard(container) {
     container.innerHTML = '';
     ROWS.forEach(row => {
@@ -151,7 +181,8 @@
   }
 
   // ---------- 遊戲狀態 ----------
-  const G = { level: null, qs: [], i: 0, correct: 0, wrong: 0, wrongOnQ: 0, start: 0, timerId: null, composing: '', busy: false, lastBad: false, nextCode: null, mode: 'unknown' };
+  const G = { level: null, qs: [], i: 0, correct: 0, wrong: 0, wrongOnQ: 0, start: 0, timerId: null, composing: '', committed: '', busy: false, lastBad: false, nextCode: null, mode: 'unknown' };
+  const MAX_WRONG_PER_Q = 5;   // 同一題最多只記 5 次錯，避免任何誤判把數字灌爆
   const kb = $('keyboard');
   const cur = () => G.qs[G.i];
 
@@ -162,16 +193,19 @@
     b.textContent = m === 'zh' ? '輸入法：中文 ㄅ' : m === 'en' ? '輸入法：英文 A' : '輸入法：？';
   }
   function setHint(msg, cls) { const h = $('hint'); h.textContent = msg || ''; h.className = 'hint ' + (cls || ''); }
-  function committedValue() {
-    // 組字中時，input.value 會包含尚未送出的組字串，要扣掉
-    return G.composing ? box.value.slice(0, box.value.length - G.composing.length) : box.value;
-  }
+  // 「已經送出的文字」。
+  // 舊版是用 box.value 減掉組字串的長度去推算，但 compositionupdate 與 input.value 的更新順序
+  // 在各瀏覽器／輸入法並不一致（有時 e.data 已經變了、box.value 還是上一刻的值），
+  // 推算出來的字串會瞬間變成亂的 → 被判成「打錯字」，正確率因此爆掉。
+  // 改成只在「沒有在組字」時記錄一次，組字期間一律沿用上次的值（組字中本來就不會改到已送出的字）。
+  function committedValue() { return G.committed; }
+  function syncCommitted() { if (!G.composing) G.committed = box.value; }
 
   function startLevel(level) {
     G.level = level;
     G.qs = makeQuestions(level, settings.n[level.id] || level.defaultN);
     if (!G.qs.length) { alert('題庫是空的，請檢查 words.js'); return; }
-    G.i = 0; G.correct = 0; G.wrong = 0; G.wrongOnQ = 0; G.composing = ''; G.busy = false; G.lastBad = false;
+    G.i = 0; G.correct = 0; G.wrong = 0; G.wrongOnQ = 0; G.composing = ''; G.committed = ''; G.busy = false; G.lastBad = false;
     G.start = Date.now();
     setMode('unknown');
     $('level-name').textContent = `第 ${level.id} 關 ${level.icon} ${level.name}`;
@@ -227,12 +261,17 @@
       return r;
     }
     const seq = keySeq(q.zhuyin[idx]);
-    const symbols = seq.slice(0, -1).map(k => k.label).join('');
+    // full = 這個字的注音（含最後面的聲調符號；一聲沒有符號）。
+    // 舊版只比對不含聲調的 symbols，學生按下二/三/四/輕聲後、
+    // 輸入法還沒轉成國字的那一瞬間，組字串是「ㄏㄠˇ」，會被誤判成按錯鍵。
+    const full = q.zhuyin[idx];
     if (rem === '') { r.status = 'typing'; r.next = seq[0].code; return r; }
     if (/^[ㄅ-ㄩˊˇˋ˙]+$/.test(rem)) {
-      if (symbols.startsWith(rem)) { r.status = 'typing'; r.symDone = rem.length; r.next = seq[rem.length].code; }
-      else {
-        let p = 0; while (p < rem.length && p < symbols.length && rem[p] === symbols[p]) p++;
+      if (full.startsWith(rem)) {
+        r.status = 'typing'; r.symDone = rem.length;
+        r.next = seq[rem.length] ? seq[rem.length].code : null;   // 聲調也打完了，等輸入法轉字
+      } else {
+        let p = 0; while (p < rem.length && p < full.length && rem[p] === full[p]) p++;
         r.status = 'symWrong'; r.symDone = p; r.next = 'Backspace'; r.msg = '注音按錯了，按 Backspace 刪掉再打';
       }
       return r;
@@ -263,6 +302,7 @@
       return;
     }
     const r = analyze(q);
+    dbg('  analyze', r.status + ' idx=' + r.idx + ' committed=' + JSON.stringify(G.committed) + ' comp=' + JSON.stringify(G.composing));
     G.nextCode = r.next; setNextKey(kb, r.next);
     // 字磚
     const tiles = $('target-tiles');
@@ -281,15 +321,24 @@
     }
     // 提示與錯誤計數（同一種錯只算一次）
     const bad = ['valueWrong', 'extra', 'symWrong', 'wrongChar'].includes(r.status);
-    if (bad && !G.lastBad) { G.wrong++; G.wrongOnQ++; playBad(); }
-    G.lastBad = bad;
+    // 組字進行中時，「已送出的文字」本來就不該改變；
+    // 這時候算出來的 valueWrong 一定是輸入法狀態還沒同步，不能算學生打錯。
+    const countable = bad && !(r.status === 'valueWrong' && G.composing);
+    if (countable && !G.lastBad) addWrong();
+    G.lastBad = countable;
     if (r.msg) setHint(r.msg, bad ? 'bad' : 'good');
     else if (G.wrongOnQ >= 3 && r.idx < q.text.length) setHint('按鍵順序：' + keySeq(q.zhuyin[r.idx]).map(k => codeLabel(k.code)).join(' → ') + ' → Enter');
     else setHint('');
   }
 
-  function wrongHit(msg, highlightCode) {
+  // 每一題最多只記 MAX_WRONG_PER_Q 次錯：就算未來遇到新的輸入法怪例，
+  // 成績也不會出現「正確 8 錯誤 44」這種不合理的數字。
+  function addWrong() {
+    if (G.wrongOnQ >= MAX_WRONG_PER_Q) return;
     G.wrong++; G.wrongOnQ++; playBad();
+  }
+  function wrongHit(msg, highlightCode) {
+    addWrong();
     setHint(msg, 'bad');
     if (highlightCode) tempHighlight(kb, highlightCode, 1500);
   }
@@ -302,7 +351,7 @@
     setTimeout(() => f.classList.add('hidden'), 700);
     G.busy = true;
     setTimeout(() => {
-      G.busy = false; box.value = ''; G.composing = ''; G.lastBad = false; G.wrongOnQ = 0;
+      G.busy = false; box.value = ''; G.composing = ''; G.committed = ''; G.lastBad = false; G.wrongOnQ = 0;
       G.i++;
       if (G.i >= G.qs.length) finishLevel(); else renderQuestion();
     }, 650);
@@ -330,6 +379,7 @@
     flashKey(kb, e.code, 'pressed');
     $('capslock-warn').classList.toggle('hidden', !(e.getModifierState && e.getModifierState('CapsLock')));
     const isProcess = e.key === 'Process' || e.isComposing || e.keyCode === 229;
+    dbg('keydown', e.code + ' key=' + JSON.stringify(e.key) + ' isProcess=' + isProcess);
     // 只用英文字母／數字判斷「英文模式」：中文模式下空白鍵、標點在沒組字時會直接送出，不能當依據
     const printable = /^[a-zA-Z0-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey;
     if (isProcess) setMode('zh'); else if (printable) setMode('en');
@@ -356,7 +406,7 @@
     if (e.key === 'Enter' && !isProcess) { e.preventDefault(); checkValue(); return; }
     if (!isProcess && printable) { e.preventDefault(); wrongHit('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); }
   });
-  box.addEventListener('compositionstart', () => { G.composing = ''; setMode('zh'); });
+  box.addEventListener('compositionstart', () => { syncCommitted(); G.composing = ''; setMode('zh'); dbg('comp-start', ''); });
   box.addEventListener('compositionupdate', e => {
     G.composing = e.data || '';
     const q = cur();
@@ -365,16 +415,19 @@
       else if (!q.passed && G.composing.length) { setHint('不是這個，按 Backspace 刪掉再找找', 'bad'); }
       if (q.passed && !G.composing) { setTimeout(checkValue, 0); }
     }
+    dbg('comp-update', JSON.stringify(G.composing));
     renderState();
   });
   box.addEventListener('compositionend', () => {
     G.composing = '';
-    setTimeout(() => { renderState(); checkValue(); }, 0);
+    setTimeout(() => { syncCommitted(); dbg('comp-end', JSON.stringify(G.committed)); renderState(); checkValue(); }, 0);
   });
   box.addEventListener('input', e => {
-    if (e.isComposing) { renderState(); return; }
+    if (e.isComposing || G.composing) { renderState(); return; }
     // 微軟注音在組字結束後會再送一次 input；非組字中的變動一律重新檢查
-    if (!G.composing) checkValue();
+    syncCommitted();
+    dbg('input', JSON.stringify(G.committed));
+    checkValue();
   });
   box.addEventListener('blur', () => $('focus-cover').classList.remove('hidden'));
   box.addEventListener('focus', () => $('focus-cover').classList.add('hidden'));
