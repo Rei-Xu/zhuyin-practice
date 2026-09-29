@@ -248,9 +248,11 @@
     }
     // 提示與錯誤計數（同一種錯只算一次）
     const bad = ['valueWrong', 'extra', 'symWrong', 'wrongChar'].includes(r.status);
-    // 組字進行中時，「已送出的文字」本來就不該改變；
-    // 這時候算出來的 valueWrong 一定是輸入法狀態還沒同步，不能算學生打錯。
-    const countable = bad && !(r.status === 'valueWrong' && G.composing);
+    // 組字進行中（字底下還有虛線）一律只提示、不記錯：
+    // 微軟注音會先自動猜字（打「大家」時中途會出現「打ㄐㄧㄚ」「打家」），
+    // 要打完或按 ↓ 選字才會變對，選字前是錯字本來就正常，不能算學生打錯。
+    // 只有按 Enter 送出後，送出的文字不對才記 1 次錯。
+    const countable = bad && !G.composing;
     if (countable && !G.lastBad) addWrong();
     G.lastBad = countable;
     if (r.msg) setHint(r.msg, bad ? 'bad' : 'good');
