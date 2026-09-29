@@ -165,12 +165,67 @@ window.ZY = (function () {
   // 判斷這個 keydown 是不是「輸入法正在處理」（＝目前是中文模式）
   function isIMEKey(e) { return e.key === 'Process' || e.isComposing || e.keyCode === 229; }
 
+  // ---------- 老師密碼 ----------
+  // 只存 PBKDF2-SHA256 雜湊（20 萬次、加鹽），原文不在程式裡。要換密碼：用 node 重算 salt/hash 貼回來
+  const TEACHER_PW = { salt: 'e902bc884e584a2e7501433d0a8fb918', iter: 200000, hash: '6e5397d47a0d533defc230ebdfa85a68ed0d4367d8c59d71738ab7616072b68b' };
+  const hexToBytes = h => new Uint8Array(h.match(/../g).map(b => parseInt(b, 16)));
+  async function checkTeacherPassword(pw) {
+    if (!window.crypto || !crypto.subtle) return false;
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: hexToBytes(TEACHER_PW.salt), iterations: TEACHER_PW.iter, hash: 'SHA-256' }, key, 256);
+    const hex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return hex === TEACHER_PW.hash;
+  }
+
+  // ---------- 成績記錄＋同步到 Google Sheet ----------
+  // SYNC_URL＝Apps Script 網頁應用程式網址（gas/Code.gs 部署後貼上）。空字串＝只存本機
+  const SYNC_URL = 'https://script.google.com/macros/s/AKfycbzeUrJyTgp4RucaZ4PvKyusJYYHvVr0RoqvI7vwz5bMViHUBqI5nXw453pDbgHUp5GH/exec';
+  const LS_RECORDS = 'zhuyinTrainer.records';
+  let syncing = null;
+  function addRecord(rec) {
+    rec.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    rec.synced = false;
+    const recs = loadJSON(LS_RECORDS, []);
+    recs.push(rec);
+    saveJSON(LS_RECORDS, recs);
+    return syncRecords();
+  }
+  function pendingCount() { return loadJSON(LS_RECORDS, []).filter(r => !r.synced).length; }
+  // 回傳 Promise<{ ok, pending, error? }>；同一時間只跑一個上傳
+  function syncRecords() {
+    if (!SYNC_URL) return Promise.resolve({ ok: false, pending: pendingCount(), error: '尚未設定上傳網址' });
+    if (syncing) return syncing;
+    const todo = loadJSON(LS_RECORDS, []).filter(r => !r.synced).slice(0, 50);
+    if (!todo.length) return Promise.resolve({ ok: true, pending: 0 });
+    // text/plain 是「簡單請求」，不會觸發 CORS 預檢，Apps Script 才收得到
+    syncing = fetch(SYNC_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ records: todo }) })
+      .then(r => r.json())
+      .then(res => {
+        if (!res.ok) throw new Error(res.error || '伺服器拒絕');
+        const done = new Set(res.ids || []);
+        const recs = loadJSON(LS_RECORDS, []);
+        recs.forEach(r => { if (done.has(r.id)) r.synced = true; });
+        saveJSON(LS_RECORDS, recs);
+        return { ok: true, pending: recs.filter(r => !r.synced).length };
+      })
+      .catch(err => ({ ok: false, pending: pendingCount(), error: String(err.message || err) }))
+      .finally(() => { syncing = null; });
+    return syncing;
+  }
+  // 開頁、恢復連線、每分鐘都補傳一次沒上傳成功的
+  if (SYNC_URL) {
+    setTimeout(syncRecords, 3000);
+    window.addEventListener('online', () => syncRecords());
+    setInterval(() => { if (pendingCount()) syncRecords(); }, 60000);
+  }
+
   return {
     ROWS, ZHUYIN_RE, TONE_MARKS, TONE_KEY, ZHUYIN_KEY, CODE_INFO, MODIFIERS,
     keySeq, wordKeySeq, codeLabel,
     renderKeyboard, keyEls, flashKey, setNextKey,
     setSound, beep, playGood, playBad, playWin, playTick, playBoom, playHurt,
     loadJSON, saveJSON, escapeHtml, shuffle, isIMEKey, showScreen, makePicker,
+    checkTeacherPassword, addRecord, syncRecords, pendingCount, SYNC_URL,
     LS_SETTINGS: 'zhuyinTrainer.settings',
     LS_RECORDS: 'zhuyinTrainer.records',
     LS_BEST: 'zhuyinTrainer.best',

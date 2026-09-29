@@ -247,3 +247,10 @@ th { background: #f5f5f5; position: sticky; top: 0; }
   .td-monster { width: 120px; }
   .td-target-word { font-size: 32px; }
 }
+
+/* ---------- 老師密碼視窗 ---------- */
+.pw-dialog { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.pw-box { background: var(--card); border-radius: var(--radius); padding: 24px 28px; width: min(360px, 90vw); text-align: center; box-shadow: 0 8px 30px rgba(0, 0, 0, .25); }
+.pw-box input { width: 100%; box-sizing: border-box; font-size: 20px; padding: 10px 12px; border: 2px solid #ddd; border-radius: 10px; }
+.pw-box input:focus { outline: none; border-color: var(--secondary); }
+#pw-msg { min-height: 1.4em; color: var(--bad); }

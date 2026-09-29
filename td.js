@@ -497,11 +497,9 @@
   $('btn-td-save-record').addEventListener('click', () => {
     const name = $('td-record-name').value.trim();
     if (!name) { $('td-record-msg').textContent = '請先輸入座號或姓名'; return; }
-    const recs = ZY.loadJSON(ZY.LS_RECORDS, []);
-    recs.push(Object.assign({ name, date: new Date().toLocaleString('zh-TW', { hour12: false }) }, T.result));
-    ZY.saveJSON(ZY.LS_RECORDS, recs);
-    $('td-record-msg').textContent = '✅ 已記錄！';
     $('btn-td-save-record').disabled = true;
+    const rec = Object.assign({ name, date: new Date().toLocaleString('zh-TW', { hour12: false }) }, T.result);
+    ZY.showSyncMsg($('td-record-msg'), ZY.addRecord(rec));
   });
 
   // 給 app.js 的首頁卡片用

@@ -384,11 +384,16 @@
   $('btn-save-record').addEventListener('click', () => {
     const name = $('record-name').value.trim();
     if (!name) { $('record-msg').textContent = '請先輸入座號或姓名'; return; }
-    const recs = loadJSON(LS_RECORDS, []);
-    recs.push(Object.assign({ name, date: new Date().toLocaleString('zh-TW', { hour12: false }) }, G.result));
-    saveJSON(LS_RECORDS, recs);
-    $('record-msg').textContent = '✅ 已記錄！'; $('btn-save-record').disabled = true;
+    $('btn-save-record').disabled = true;
+    const rec = Object.assign({ name, date: new Date().toLocaleString('zh-TW', { hour12: false }), levelName: G.level.name }, G.result);
+    ZY.showSyncMsg($('record-msg'), ZY.addRecord(rec));
   });
+  // 存完成績後的提示：先說已存本機，上傳結果回來再更新（td.js 也共用）
+  ZY.showSyncMsg = (el, p) => {
+    if (!ZY.SYNC_URL) { el.textContent = '✅ 已記錄！'; return; }
+    el.textContent = '✅ 已記錄！正在上傳…';
+    p.then(res => { el.textContent = res.ok ? '✅ 已記錄並上傳到老師的表單！' : '✅ 已記錄在這台電腦（網路恢復後會自動補傳）'; });
+  };
   $('btn-skip-record').addEventListener('click', () => $('record-box').classList.add('hidden'));
   $('btn-retry').addEventListener('click', () => startLevel(G.level));
   $('btn-next-level').addEventListener('click', () => startLevel(LEVELS[G.level.id + 1]));
@@ -475,11 +480,44 @@
       const isTd = r.mode === 'td';
       const what = isTd ? `🏰 塔防（撐到第 ${r.wave} 波）` : `第 ${r.level} 關 ${LEVELS[r.level] ? LEVELS[r.level].name : ''}`;
       const last = isTd ? `${r.score} 分` : '⭐'.repeat(r.stars);
-      return `<tr><td>${r.date}</td><td>${escapeHtml(r.name)}</td><td>${what}</td><td>${r.correct}</td><td>${r.wrong}</td><td>${r.acc}%</td><td>${r.seconds} 秒</td><td>${last}</td></tr>`;
+      const sync = !ZY.SYNC_URL ? '—' : r.synced ? '✅' : '⏳';
+      return `<tr><td>${r.date}</td><td>${escapeHtml(r.name)}</td><td>${what}</td><td>${r.correct}</td><td>${r.wrong}</td><td>${r.acc}%</td><td>${r.seconds} 秒</td><td>${last}</td><td>${sync}</td></tr>`;
     }).join('')
-      : '<tr><td colspan="8">還沒有任何記錄</td></tr>';
+      : '<tr><td colspan="9">還沒有任何記錄</td></tr>';
+    renderSyncStatus();
   }
-  $('btn-teacher').addEventListener('click', () => { renderSettingsForm(); renderRecords(); showScreen('teacher'); });
+  function renderSyncStatus(extra) {
+    const n = ZY.pendingCount();
+    $('sync-status').textContent = !ZY.SYNC_URL ? '尚未設定 Google Sheet 上傳網址，成績只存在這台電腦'
+      : (n ? `還有 ${n} 筆沒上傳到 Google Sheet` : '全部都已上傳到 Google Sheet ✅') + (extra ? `（${extra}）` : '');
+    $('btn-sync-now').classList.toggle('hidden', !ZY.SYNC_URL);
+  }
+  $('btn-sync-now').addEventListener('click', () => {
+    $('sync-status').textContent = '上傳中…';
+    ZY.syncRecords().then(res => { renderRecords(); if (!res.ok) renderSyncStatus('失敗：' + res.error); });
+  });
+
+  // 進老師模式要密碼（每次進入都要輸入）
+  function openPwDialog() {
+    $('pw-input').value = ''; $('pw-msg').textContent = '';
+    $('pw-dialog').classList.remove('hidden');
+    setTimeout(() => $('pw-input').focus(), 50);
+  }
+  function closePwDialog() { $('pw-dialog').classList.add('hidden'); }
+  async function submitPw() {
+    const pw = $('pw-input').value;
+    if (!pw) return;
+    $('pw-msg').textContent = '檢查中…'; $('btn-pw-ok').disabled = true;
+    const ok = await ZY.checkTeacherPassword(pw).catch(() => false);
+    $('btn-pw-ok').disabled = false;
+    if (!ok) { $('pw-msg').textContent = '密碼不對喔'; $('pw-input').value = ''; $('pw-input').focus(); return; }
+    closePwDialog();
+    renderSettingsForm(); renderRecords(); showScreen('teacher');
+  }
+  $('btn-teacher').addEventListener('click', openPwDialog);
+  $('btn-pw-ok').addEventListener('click', submitPw);
+  $('btn-pw-cancel').addEventListener('click', closePwDialog);
+  $('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitPw(); else if (e.key === 'Escape') closePwDialog(); });
   $('btn-teacher-quit').addEventListener('click', () => { renderHome(); showScreen('home'); });
   $('btn-save-settings').addEventListener('click', () => {
     const f = $('settings-form');
