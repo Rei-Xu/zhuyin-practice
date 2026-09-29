@@ -119,18 +119,22 @@
   }
 
   // ---------- 遊戲狀態 ----------
-  const G = { level: null, qs: [], i: 0, correct: 0, wrong: 0, wrongOnQ: 0, start: 0, timerId: null, composing: '', committed: '', busy: false, lastBad: false, modeErr: false, nextCode: null, mode: 'unknown' };
+  const G = { level: null, qs: [], i: 0, correct: 0, wrong: 0, wrongOnQ: 0, start: 0, timerId: null, composing: '', committed: '', busy: false, lastBad: false, err: null, nextCode: null, mode: 'unknown' };
   const MAX_WRONG_PER_Q = 5;   // 同一題最多只記 5 次錯，避免任何誤判把數字灌爆
   const kb = $('keyboard');
   const cur = () => G.qs[G.i];
 
   function setMode(m) {
+    if (G.mode !== m) dbg('mode', m);
     G.mode = m;
     const b = $('mode-badge');
     b.className = 'mode-badge ' + m;
     b.textContent = m === 'zh' ? '輸入法：中文 ㄅ' : m === 'en' ? '輸入法：英文 A' : '輸入法：？';
   }
   function setHint(msg, cls) { const h = $('hint'); h.textContent = msg || ''; h.className = 'hint ' + (cls || ''); }
+  // 組字串裡有注音或國字（非英數）＝ 真的在中文模式。
+  // 有些電腦的微軟注音在「英文模式」也會用組字的方式送出英文字母，所以不能只看「有沒有組字」。
+  const hasZh = s => /[^\x00-\x7F]/.test(s || '');
   // 「已經送出的文字」。
   // 舊版是用 box.value 減掉組字串的長度去推算，但 compositionupdate 與 input.value 的更新順序
   // 在各瀏覽器／輸入法並不一致（有時 e.data 已經變了、box.value 還是上一刻的值），
@@ -143,7 +147,7 @@
     G.level = level;
     G.qs = makeQuestions(level, settings.n[level.id] || level.defaultN);
     if (!G.qs.length) { alert('題庫是空的，請檢查 words.js'); return; }
-    G.i = 0; G.correct = 0; G.wrong = 0; G.wrongOnQ = 0; G.composing = ''; G.committed = ''; G.busy = false; G.lastBad = false; G.modeErr = false;
+    G.i = 0; G.correct = 0; G.wrong = 0; G.wrongOnQ = 0; G.composing = ''; G.committed = ''; G.busy = false; G.lastBad = false; G.err = null;
     G.start = Date.now();
     setMode('unknown');
     $('level-name').textContent = `第 ${level.id} 關 ${level.icon} ${level.name}`;
@@ -233,12 +237,12 @@
       const nextCh = ok ? q.text[v.length] : null;
       G.nextCode = nextCh ? 'Key' + nextCh.toUpperCase() : 'Backspace';
       setNextKey(kb, G.nextCode);
-      // 只看「已經送出」的結果；組字中（在中文模式打字）已在 compositionstart 記過一次
+      // 只看「已經送出」的結果；組字中打出注音已在 compositionupdate 記過一次
       if (!G.composing) {
-        if (ok) G.modeErr = false;                       // 改正了，下一次失誤才會再記
-        else if (/[^a-zA-Z]/.test(v)) mistakeOnce('現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'ShiftLeft');
-        else mistakeOnce('打錯了，按 Backspace 刪掉', 'Backspace');
-      } else setHint('現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'bad');
+        if (ok) G.err = null;                            // 改正了，下一次失誤才會再記
+        else if (/[^a-zA-Z]/.test(v)) mistakeOnce('mode', '現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'ShiftLeft');
+        else mistakeOnce('typo', '打錯了，按 Backspace 刪掉', 'Backspace');
+      } else if (hasZh(G.composing)) setHint('現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'bad');
       return;
     }
     if (q.kind === 'symbol') {
@@ -271,8 +275,9 @@
     // 要打完或按 ↓ 選字才會變對，選字前是錯字本來就正常，不能算學生打錯。
     // 只有按 Enter 送出後，送出的文字不對才記 1 次錯。
     const countable = bad && !G.composing;
-    if (countable && !G.lastBad) addWrong();
-    G.lastBad = countable;
+    if (countable && !G.lastBad) { addWrong(); dbg('記錯', r.status + '：' + r.msg); }
+    // 組字中不改變「這個錯記過了沒」：不然送出錯字後再打下一個字，同一個錯字會被記第二次
+    if (!G.composing) G.lastBad = countable;
     if (r.msg) setHint(r.msg, bad ? 'bad' : 'good');
     else if (G.wrongOnQ >= 3 && r.idx < q.text.length) setHint('按鍵順序：' + keySeq(q.zhuyin[r.idx]).map(k => codeLabel(k.code)).join(' → ') + ' → Enter');
     else setHint('');
@@ -284,11 +289,11 @@
     if (G.wrongOnQ >= MAX_WRONG_PER_Q) return;
     G.wrong++; G.wrongOnQ++; playBad();
   }
-  // 一次失誤只記 1 次錯：記過之後要等學生改正（G.modeErr 被清掉）才會再記。
-  // 例如還在英文模式連按 3 個鍵才發現，只算錯 1 次。
-  function mistakeOnce(msg, highlightCode) {
-    if (!G.modeErr) addWrong();
-    G.modeErr = true;
+  // 一次失誤只記 1 次錯：同一種失誤（kind：mode 模式錯／key 按錯注音／typo 英文拼錯）
+  // 記過之後要等學生改正（G.err 被清掉）才會再記。例如還在英文模式連按 3 個鍵才發現，只算錯 1 次。
+  function mistakeOnce(kind, msg, highlightCode) {
+    if (G.err !== kind) { addWrong(); dbg('記錯', kind + '：' + msg); }
+    G.err = kind;
     setHint(msg, 'bad');
     if (highlightCode) tempHighlight(kb, highlightCode, 1500);
   }
@@ -301,7 +306,7 @@
     setTimeout(() => f.classList.add('hidden'), 700);
     G.busy = true;
     setTimeout(() => {
-      G.busy = false; box.value = ''; G.composing = ''; G.committed = ''; G.lastBad = false; G.modeErr = false; G.wrongOnQ = 0;
+      G.busy = false; box.value = ''; G.composing = ''; G.committed = ''; G.lastBad = false; G.err = null; G.wrongOnQ = 0;
       G.i++;
       if (G.i >= G.qs.length) finishLevel(); else renderQuestion();
     }, 650);
@@ -334,20 +339,20 @@
     const printable = /^[a-zA-Z0-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey;
     // 重要：微軟注音在「英文模式」下，有些電腦的按鍵一樣回報 Process／229，
     // 所以 keydown 不能拿來判斷「還在中文模式」而記錯（舊版第 0 關全對卻錯一堆就是這個原因）。
-    // 中文模式一律看 compositionstart；英文模式看「非 229 的英數鍵」或「字直接被送進輸入框」。
+    // 中文模式一律看「組字串裡有沒有注音／國字」；英文模式看「非 229 的英數鍵」或「送進來的是英文字母」。
     if (!isProcess && printable) setMode('en');
     const q = cur();
     if (!q || MODIFIERS.has(e.code)) return;
 
     if (q.kind === 'symbol') {
-      if (!isProcess && printable) { e.preventDefault(); mistakeOnce('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); return; }
+      if (!isProcess && printable) { e.preventDefault(); mistakeOnce('mode', '還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); return; }
       if (e.key === 'Enter' && !isProcess) { e.preventDefault(); checkValue(); return; }
       // 按錯注音鍵這裡只閃紅色；記不記錯交給 compositionupdate，看輸入法實際打出什麼
       if (!q.passed && isProcess && e.code !== q.code && e.code !== 'Backspace' && e.code !== 'Escape') flashKey(kb, e.code, 'wrong');
       return;
     }
     if (q.kind === 'en') {
-      // 英文題在 keydown 一律不記錯：打對打錯看送進輸入框的字（renderState），在中文模式打字看 compositionstart
+      // 英文題在 keydown 一律不記錯：打對打錯看送進輸入框的字（renderState），在中文模式打字看 compositionupdate
       if (e.key === 'Enter' && !isProcess) { e.preventDefault(); checkValue(); return; }
       if (printable && !isProcess) {
         const expected = q.text[box.value.length];
@@ -357,27 +362,28 @@
     }
     // text 題
     if (e.key === 'Enter' && !isProcess) { e.preventDefault(); checkValue(); return; }
-    if (!isProcess && printable) { e.preventDefault(); mistakeOnce('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); }
+    if (!isProcess && printable) { e.preventDefault(); mistakeOnce('mode', '還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); }
   });
-  box.addEventListener('compositionstart', () => {
-    syncCommitted(); G.composing = ''; setMode('zh'); dbg('comp-start', '');
-    const q = cur();
-    if (!q || G.busy) return;
-    // 英文題卻開始組注音 → 還在中文模式，這次失誤記 1 次
-    if (q.kind === 'en') mistakeOnce('現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'ShiftLeft');
-    else G.modeErr = false;   // 中文題／注音題：切回中文了，算改正
-  });
+  // compositionstart 不判斷中英：有些電腦在英文模式打字母也會觸發組字，要等 compositionupdate 看內容
+  box.addEventListener('compositionstart', () => { syncCommitted(); G.composing = ''; dbg('comp-start', ''); });
   box.addEventListener('compositionupdate', e => {
     G.composing = e.data || '';
-    const q = cur();
-    if (!q) return;
-    if (q.kind === 'symbol') {
-      if (!q.passed && G.composing.includes(q.text)) { q.passed = true; G.modeErr = false; playGood(); setHint('答對了！按 Backspace 刪掉，換下一題', 'good'); }
-      else if (!q.passed && G.composing.length) mistakeOnce('不是這個，按 Backspace 刪掉再找找', q.code);
-      else if (!G.composing) G.modeErr = false;   // 刪乾淨了，下一次按錯再記
-      if (q.passed && !G.composing) { setTimeout(checkValue, 0); }
-    }
     dbg('comp-update', JSON.stringify(G.composing));
+    const q = cur();
+    if (!q || G.busy) return;
+    const zh = hasZh(G.composing);
+    if (G.composing) setMode(zh ? 'zh' : 'en');
+    if (q.kind === 'en') {
+      // 英文題卻打出注音 → 還在中文模式，這次失誤記 1 次（組的是英文字母就沒事）
+      if (zh) mistakeOnce('mode', '現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'ShiftLeft');
+    } else if (q.kind === 'symbol') {
+      if (zh && G.err === 'mode') G.err = null;                        // 切回中文了，算改正
+      if (!q.passed && G.composing.includes(q.text)) { q.passed = true; G.err = null; playGood(); setHint('答對了！按 Backspace 刪掉，換下一題', 'good'); }
+      else if (!q.passed && G.composing && !zh) mistakeOnce('mode', '還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft');
+      else if (!q.passed && G.composing) mistakeOnce('key', '不是這個，按 Backspace 刪掉再找找', q.code);
+      else if (!G.composing && G.err === 'key') G.err = null;          // 刪乾淨了，下一次按錯再記
+      if (q.passed && !G.composing) { setTimeout(checkValue, 0); }
+    } else if (zh && G.err === 'mode') G.err = null;                   // 中文題：切回中文了，算改正
     renderState();
   });
   box.addEventListener('compositionend', () => {
@@ -396,7 +402,7 @@
     // 注音題卻直接送進英文／數字（英文模式下有些電腦 keydown 擋不住）→ 清掉，記 1 次
     if (q.kind === 'symbol' && /[a-zA-Z0-9]/.test(box.value)) {
       box.value = '';
-      mistakeOnce('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft');
+      mistakeOnce('mode', '還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft');
       return;
     }
     checkValue();
