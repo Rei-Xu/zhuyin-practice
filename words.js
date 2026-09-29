@@ -9,12 +9,13 @@
 //         { text: "你好", zhuyin: ["ㄋㄧˇ", "ㄏㄠˇ"] }
 //   注意：每一行結尾要有逗號，符號請用半形。
 //
-// 五個區塊：
+// 六個區塊：
 //   chars     單字   → 第 2 關、塔防第 1~3 波
 //   words     二字詞 → 第 3 關、塔防第 4~6 波
 //   words3    三字詞 → 第 3 關、塔防第 7~9 波
 //   sentences 短句   → 第 4 關
 //   bossWords 四字詞 → 塔防大魔王
+//   english   英文單字 → 第 4 關（格式不同：{ text: "apple", zh: "蘋果" }，不用寫注音）
 //
 // 【變調怎麼標】本題庫一律標「本調」，因為微軟注音用本調一定打得出那個字：
 //   ・「一」一律 ㄧ（不是 ㄧˊ／ㄧˋ）
@@ -755,5 +756,81 @@ window.WORD_BANK = {
     { text: "電腦高手", zhuyin: ["ㄉㄧㄢˋ", "ㄋㄠˇ", "ㄍㄠ", "ㄕㄡˇ"] },
     { text: "鍵盤滑鼠", zhuyin: ["ㄐㄧㄢˋ", "ㄆㄢˊ", "ㄏㄨㄚˊ", "ㄕㄨˇ"] },
     { text: "專心打字", zhuyin: ["ㄓㄨㄢ", "ㄒㄧㄣ", "ㄉㄚˇ", "ㄗˋ"] },
+  ],
+
+  // ==========================================================
+  // 第 4 關：英文單字（跟中文句子交錯出題，練習 Shift 切換中英文）
+  //   text 請用「小寫英文字母」，zh 是畫面上顯示的中文意思
+  // ==========================================================
+  english: [
+    // ── 水果與食物 ──
+    { text: "apple", zh: "蘋果" },
+    { text: "banana", zh: "香蕉" },
+    { text: "egg", zh: "蛋" },
+    { text: "milk", zh: "牛奶" },
+    { text: "cake", zh: "蛋糕" },
+    { text: "rice", zh: "飯" },
+    { text: "water", zh: "水" },
+    { text: "juice", zh: "果汁" },
+    { text: "bread", zh: "麵包" },
+    { text: "candy", zh: "糖果" },
+    // ── 動物 ──
+    { text: "cat", zh: "貓" },
+    { text: "dog", zh: "狗" },
+    { text: "pig", zh: "豬" },
+    { text: "cow", zh: "牛" },
+    { text: "fish", zh: "魚" },
+    { text: "bird", zh: "鳥" },
+    { text: "duck", zh: "鴨子" },
+    { text: "bear", zh: "熊" },
+    { text: "lion", zh: "獅子" },
+    { text: "tiger", zh: "老虎" },
+    // ── 學校與文具 ──
+    { text: "book", zh: "書" },
+    { text: "pen", zh: "筆" },
+    { text: "bag", zh: "書包" },
+    { text: "desk", zh: "書桌" },
+    { text: "chair", zh: "椅子" },
+    { text: "ruler", zh: "尺" },
+    { text: "school", zh: "學校" },
+    { text: "class", zh: "班級" },
+    // ── 家裡 ──
+    { text: "home", zh: "家" },
+    { text: "bed", zh: "床" },
+    { text: "door", zh: "門" },
+    { text: "box", zh: "箱子" },
+    { text: "cup", zh: "杯子" },
+    { text: "toy", zh: "玩具" },
+    { text: "ball", zh: "球" },
+    { text: "hat", zh: "帽子" },
+    // ── 家人 ──
+    { text: "mom", zh: "媽媽" },
+    { text: "dad", zh: "爸爸" },
+    { text: "baby", zh: "嬰兒" },
+    { text: "friend", zh: "朋友" },
+    // ── 顏色 ──
+    { text: "red", zh: "紅色" },
+    { text: "blue", zh: "藍色" },
+    { text: "green", zh: "綠色" },
+    { text: "pink", zh: "粉紅色" },
+    { text: "black", zh: "黑色" },
+    { text: "white", zh: "白色" },
+    // ── 天氣與自然 ──
+    { text: "sun", zh: "太陽" },
+    { text: "moon", zh: "月亮" },
+    { text: "star", zh: "星星" },
+    { text: "rain", zh: "雨" },
+    { text: "tree", zh: "樹" },
+    { text: "flower", zh: "花" },
+    // ── 交通 ──
+    { text: "car", zh: "汽車" },
+    { text: "bus", zh: "公車" },
+    { text: "bike", zh: "腳踏車" },
+    { text: "boat", zh: "船" },
+    // ── 常用字 ──
+    { text: "yes", zh: "是" },
+    { text: "no", zh: "不是" },
+    { text: "hello", zh: "你好" },
+    { text: "happy", zh: "快樂" },
   ],
 };

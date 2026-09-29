@@ -18,7 +18,7 @@
     { id: 1, name: '注音在哪裡', icon: '🔍', desc: '找到鍵盤上的注音符號', defaultN: 10 },
     { id: 2, name: '聲調與送出', icon: '🎵', desc: '打出一個字，按 Enter 送出', defaultN: 10 },
     { id: 3, name: '選字高手', icon: '🎯', desc: '用 ↓ 和數字選出正確的字', defaultN: 8 },
-    { id: 4, name: '綜合挑戰', icon: '🏆', desc: '打出完整句子，計時！', defaultN: 5, timer: true },
+    { id: 4, name: '綜合挑戰', icon: '🏆', desc: '打出句子和英文單字，練習切換，計時！', defaultN: 5, timer: true },
   ];
   const ALL_SYMBOLS = 'ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄧㄨㄩㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦ'.split('');
   const EN_WORDS = ['hi', 'ok', 'go', 'abc', 'yes', 'no', 'cat', 'dog'];
@@ -39,7 +39,17 @@
     }
     // 用發牌器出題：同一次不重複，而且連玩好幾場也要把整個題庫走完一輪才會再遇到同一題
     const items = picker(level.id).take(n);
-    return items.map(w => ({ kind: 'text', text: w.text, zhuyin: w.zhuyin }));
+    const qs = items.map(w => ({ kind: 'text', text: w.text, zhuyin: w.zhuyin }));
+    if (level.id !== 4) return qs;
+    // 第 4 關：另外加英文單字題（不佔句子名額），中、英交錯出，每題都要切換一次輸入法
+    const enN = Math.max(0, parseInt(settings.enN4, 10) || 0);
+    const en = enN ? picker('en').take(enN).map(w => ({ kind: 'en', text: String(w.text).toLowerCase(), zh: w.zh })) : [];
+    const mixed = [];
+    for (let i = 0; i < Math.max(qs.length, en.length); i++) {
+      if (qs[i]) mixed.push(qs[i]);
+      if (en[i]) mixed.push(en[i]);
+    }
+    return mixed;
   }
 
   // 每個題源一個發牌器，整個分頁共用（重玩不會重置）
@@ -47,7 +57,8 @@
   function picker(levelId) {
     if (!PICKERS[levelId]) {
       const b = bank();
-      const src = levelId === 2 ? (b.chars || [])
+      const src = levelId === 'en' ? (b.english || [])                    // 第 4 關的英文單字
+                : levelId === 2 ? (b.chars || [])
                 : levelId === 3 ? (b.words || []).concat(b.words3 || [])   // 第 3 關：二字詞＋三字詞混著出
                 : (b.sentences || []);
       PICKERS[levelId] = makePicker(src);
@@ -57,7 +68,7 @@
 
   // ---------- 設定與記錄（localStorage，只存本機） ----------
   const LS_SETTINGS = 'zhuyinTrainer.settings', LS_RECORDS = 'zhuyinTrainer.records', LS_BEST = 'zhuyinTrainer.best';
-  const DEFAULT_SETTINGS = { n: { 0: 6, 1: 10, 2: 10, 3: 8, 4: 5 }, enabled: { 0: true, 1: true, 2: true, 3: true, 4: true }, timerAll: false, askName: true, sound: true,
+  const DEFAULT_SETTINGS = { n: { 0: 6, 1: 10, 2: 10, 3: 8, 4: 5 }, enabled: { 0: true, 1: true, 2: true, 3: true, 4: true }, timerAll: false, askName: true, sound: true, enN4: 3,
     tdEnabled: true, tdSpeed: 'normal', tdHearts: 3, tdBoss: true, tdKeyHint: true };
   let settings = Object.assign({}, DEFAULT_SETTINGS, loadJSON(LS_SETTINGS, {}));
   settings.n = Object.assign({}, DEFAULT_SETTINGS.n, settings.n);
@@ -108,7 +119,7 @@
   }
 
   // ---------- 遊戲狀態 ----------
-  const G = { level: null, qs: [], i: 0, correct: 0, wrong: 0, wrongOnQ: 0, start: 0, timerId: null, composing: '', committed: '', busy: false, lastBad: false, nextCode: null, mode: 'unknown' };
+  const G = { level: null, qs: [], i: 0, correct: 0, wrong: 0, wrongOnQ: 0, start: 0, timerId: null, composing: '', committed: '', busy: false, lastBad: false, modeErr: false, nextCode: null, mode: 'unknown' };
   const MAX_WRONG_PER_Q = 5;   // 同一題最多只記 5 次錯，避免任何誤判把數字灌爆
   const kb = $('keyboard');
   const cur = () => G.qs[G.i];
@@ -132,7 +143,7 @@
     G.level = level;
     G.qs = makeQuestions(level, settings.n[level.id] || level.defaultN);
     if (!G.qs.length) { alert('題庫是空的，請檢查 words.js'); return; }
-    G.i = 0; G.correct = 0; G.wrong = 0; G.wrongOnQ = 0; G.composing = ''; G.committed = ''; G.busy = false; G.lastBad = false;
+    G.i = 0; G.correct = 0; G.wrong = 0; G.wrongOnQ = 0; G.composing = ''; G.committed = ''; G.busy = false; G.lastBad = false; G.modeErr = false;
     G.start = Date.now();
     setMode('unknown');
     $('level-name').textContent = `第 ${level.id} 關 ${level.icon} ${level.name}`;
@@ -153,7 +164,7 @@
     const tiles = $('target-tiles'), guide = $('key-guide');
     tiles.innerHTML = ''; guide.innerHTML = '';
     if (q.kind === 'en') {
-      $('task-instruction').innerHTML = '切換成 <span style="color:#4a90e2">英文</span>，打出：';
+      $('task-instruction').innerHTML = '切換成 <span style="color:#4a90e2">英文</span>，打出' + (q.zh ? `「${escapeHtml(q.zh)}」的英文` : '') + '：';
       tiles.innerHTML = q.text.split('').map(c => `<div class="tile"><div class="ch">${c}</div></div>`).join('');
       setHint('小提醒：按一下 Shift 可以切換中文／英文');
     } else if (q.kind === 'symbol') {
@@ -165,6 +176,8 @@
       $('task-instruction').textContent = q.text.length === 1 ? '打出這個字，再按 Enter 送出：' : '打出這些字，再按 Enter 送出：';
     }
     renderState();
+    // 第 4 關上一題是英文：提醒切回中文
+    if (q.kind === 'text' && G.i > 0 && G.qs[G.i - 1].kind === 'en') setHint('小提醒：按一下 Shift 切換回中文');
   }
 
   // 分析目前「已送出的文字 + 組字串」與目標的關係
@@ -220,7 +233,12 @@
       const nextCh = ok ? q.text[v.length] : null;
       G.nextCode = nextCh ? 'Key' + nextCh.toUpperCase() : 'Backspace';
       setNextKey(kb, G.nextCode);
-      if (!ok) setHint(G.composing ? '現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文' : '打錯了，按 Backspace 刪掉', 'bad');
+      // 只看「已經送出」的結果；組字中（在中文模式打字）已在 compositionstart 記過一次
+      if (!G.composing) {
+        if (ok) G.modeErr = false;                       // 改正了，下一次失誤才會再記
+        else if (/[^a-zA-Z]/.test(v)) mistakeOnce('現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'ShiftLeft');
+        else mistakeOnce('打錯了，按 Backspace 刪掉', 'Backspace');
+      } else setHint('現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'bad');
       return;
     }
     if (q.kind === 'symbol') {
@@ -266,8 +284,11 @@
     if (G.wrongOnQ >= MAX_WRONG_PER_Q) return;
     G.wrong++; G.wrongOnQ++; playBad();
   }
-  function wrongHit(msg, highlightCode) {
-    addWrong();
+  // 一次失誤只記 1 次錯：記過之後要等學生改正（G.modeErr 被清掉）才會再記。
+  // 例如還在英文模式連按 3 個鍵才發現，只算錯 1 次。
+  function mistakeOnce(msg, highlightCode) {
+    if (!G.modeErr) addWrong();
+    G.modeErr = true;
     setHint(msg, 'bad');
     if (highlightCode) tempHighlight(kb, highlightCode, 1500);
   }
@@ -280,7 +301,7 @@
     setTimeout(() => f.classList.add('hidden'), 700);
     G.busy = true;
     setTimeout(() => {
-      G.busy = false; box.value = ''; G.composing = ''; G.committed = ''; G.lastBad = false; G.wrongOnQ = 0;
+      G.busy = false; box.value = ''; G.composing = ''; G.committed = ''; G.lastBad = false; G.modeErr = false; G.wrongOnQ = 0;
       G.i++;
       if (G.i >= G.qs.length) finishLevel(); else renderQuestion();
     }, 650);
@@ -311,21 +332,24 @@
     dbg('keydown', e.code + ' key=' + JSON.stringify(e.key) + ' isProcess=' + isProcess);
     // 只用英文字母／數字判斷「英文模式」：中文模式下空白鍵、標點在沒組字時會直接送出，不能當依據
     const printable = /^[a-zA-Z0-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey;
-    if (isProcess) setMode('zh'); else if (printable) setMode('en');
+    // 重要：微軟注音在「英文模式」下，有些電腦的按鍵一樣回報 Process／229，
+    // 所以 keydown 不能拿來判斷「還在中文模式」而記錯（舊版第 0 關全對卻錯一堆就是這個原因）。
+    // 中文模式一律看 compositionstart；英文模式看「非 229 的英數鍵」或「字直接被送進輸入框」。
+    if (!isProcess && printable) setMode('en');
     const q = cur();
-    if (MODIFIERS.has(e.code)) return;
+    if (!q || MODIFIERS.has(e.code)) return;
 
     if (q.kind === 'symbol') {
-      if (!isProcess && printable) { e.preventDefault(); wrongHit('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); return; }
+      if (!isProcess && printable) { e.preventDefault(); mistakeOnce('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); return; }
       if (e.key === 'Enter' && !isProcess) { e.preventDefault(); checkValue(); return; }
-      if (q.passed || isProcess === false) return;
-      if (e.code !== q.code && e.code !== 'Backspace' && e.code !== 'Escape') { flashKey(kb, e.code, 'wrong'); wrongHit('不是這個鍵喔，找找看黃色的鍵', q.code); }
+      // 按錯注音鍵這裡只閃紅色；記不記錯交給 compositionupdate，看輸入法實際打出什麼
+      if (!q.passed && isProcess && e.code !== q.code && e.code !== 'Backspace' && e.code !== 'Escape') flashKey(kb, e.code, 'wrong');
       return;
     }
     if (q.kind === 'en') {
-      if (isProcess) { if (!G.composing) wrongHit('現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'ShiftLeft'); return; }
-      if (e.key === 'Enter') { e.preventDefault(); checkValue(); return; }
-      if (printable) {
+      // 英文題在 keydown 一律不記錯：打對打錯看送進輸入框的字（renderState），在中文模式打字看 compositionstart
+      if (e.key === 'Enter' && !isProcess) { e.preventDefault(); checkValue(); return; }
+      if (printable && !isProcess) {
         const expected = q.text[box.value.length];
         if (!q.text.startsWith(box.value.toLowerCase()) || e.key.toLowerCase() !== expected) { flashKey(kb, e.code, 'wrong'); }
       }
@@ -333,15 +357,24 @@
     }
     // text 題
     if (e.key === 'Enter' && !isProcess) { e.preventDefault(); checkValue(); return; }
-    if (!isProcess && printable) { e.preventDefault(); wrongHit('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); }
+    if (!isProcess && printable) { e.preventDefault(); mistakeOnce('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft'); }
   });
-  box.addEventListener('compositionstart', () => { syncCommitted(); G.composing = ''; setMode('zh'); dbg('comp-start', ''); });
+  box.addEventListener('compositionstart', () => {
+    syncCommitted(); G.composing = ''; setMode('zh'); dbg('comp-start', '');
+    const q = cur();
+    if (!q || G.busy) return;
+    // 英文題卻開始組注音 → 還在中文模式，這次失誤記 1 次
+    if (q.kind === 'en') mistakeOnce('現在要打英文！按 Backspace 刪掉，再按一下 Shift 切換成英文', 'ShiftLeft');
+    else G.modeErr = false;   // 中文題／注音題：切回中文了，算改正
+  });
   box.addEventListener('compositionupdate', e => {
     G.composing = e.data || '';
     const q = cur();
+    if (!q) return;
     if (q.kind === 'symbol') {
-      if (!q.passed && G.composing.includes(q.text)) { q.passed = true; playGood(); setHint('答對了！按 Backspace 刪掉，換下一題', 'good'); }
-      else if (!q.passed && G.composing.length) { setHint('不是這個，按 Backspace 刪掉再找找', 'bad'); }
+      if (!q.passed && G.composing.includes(q.text)) { q.passed = true; G.modeErr = false; playGood(); setHint('答對了！按 Backspace 刪掉，換下一題', 'good'); }
+      else if (!q.passed && G.composing.length) mistakeOnce('不是這個，按 Backspace 刪掉再找找', q.code);
+      else if (!G.composing) G.modeErr = false;   // 刪乾淨了，下一次按錯再記
       if (q.passed && !G.composing) { setTimeout(checkValue, 0); }
     }
     dbg('comp-update', JSON.stringify(G.composing));
@@ -349,13 +382,23 @@
   });
   box.addEventListener('compositionend', () => {
     G.composing = '';
-    setTimeout(() => { syncCommitted(); dbg('comp-end', JSON.stringify(G.committed)); renderState(); checkValue(); }, 0);
+    setTimeout(() => { syncCommitted(); dbg('comp-end', JSON.stringify(G.committed)); if (cur()) { renderState(); checkValue(); } }, 0);
   });
   box.addEventListener('input', e => {
     if (e.isComposing || G.composing) { renderState(); return; }
     // 微軟注音在組字結束後會再送一次 input；非組字中的變動一律重新檢查
     syncCommitted();
     dbg('input', JSON.stringify(G.committed));
+    const q = cur();
+    if (!q || G.busy) return;
+    // 字沒經過組字就直接進來，而且是英文字母 → 目前是英文模式
+    if (/[a-zA-Z]$/.test(box.value)) setMode('en');
+    // 注音題卻直接送進英文／數字（英文模式下有些電腦 keydown 擋不住）→ 清掉，記 1 次
+    if (q.kind === 'symbol' && /[a-zA-Z0-9]/.test(box.value)) {
+      box.value = '';
+      mistakeOnce('還在英文模式！按一下 Shift 切換成中文', 'ShiftLeft');
+      return;
+    }
     checkValue();
   });
   box.addEventListener('blur', () => $('focus-cover').classList.remove('hidden'));
@@ -459,7 +502,8 @@
     const f = $('settings-form');
     f.innerHTML = LEVELS.map(l => `
       <label>第 ${l.id} 關 ${l.name}：開放 <input type="checkbox" data-en="${l.id}" ${settings.enabled[l.id] ? 'checked' : ''}></label>
-      <label>第 ${l.id} 關 題數 <input type="number" min="1" max="50" data-n="${l.id}" value="${settings.n[l.id]}"></label>`).join('') + `
+      <label>第 ${l.id} 關 ${l.id === 4 ? '中文句子' : ''}題數 <input type="number" min="1" max="50" data-n="${l.id}" value="${settings.n[l.id]}"></label>`).join('') + `
+      <label>第 4 關 英文單字題數（0＝不出） <input type="number" min="0" max="20" id="s-en4" value="${settings.enN4}"></label>
       <label>每一關都顯示計時 <input type="checkbox" id="s-timer" ${settings.timerAll ? 'checked' : ''}></label>
       <label>結算時顯示「輸入姓名記錄」 <input type="checkbox" id="s-askname" ${settings.askName ? 'checked' : ''}></label>
       <label>音效 <input type="checkbox" id="s-sound" ${settings.sound ? 'checked' : ''}></label>
@@ -525,6 +569,8 @@
     const f = $('settings-form');
     f.querySelectorAll('[data-en]').forEach(el => settings.enabled[el.dataset.en] = el.checked);
     f.querySelectorAll('[data-n]').forEach(el => settings.n[el.dataset.n] = Math.max(1, parseInt(el.value, 10) || 1));
+    const en4 = parseInt($('s-en4').value, 10);
+    settings.enN4 = isNaN(en4) ? DEFAULT_SETTINGS.enN4 : Math.min(20, Math.max(0, en4));
     settings.timerAll = $('s-timer').checked; settings.askName = $('s-askname').checked; settings.sound = $('s-sound').checked;
     settings.tdEnabled = $('s-td-en').checked;
     settings.tdSpeed = $('s-td-speed').value;

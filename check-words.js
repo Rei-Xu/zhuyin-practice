@@ -19,7 +19,10 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const sandbox = { window: {}, console, String, Object, Math, JSON, RegExp, Array, Set, Map };
+// core.js 有成績上傳（計時補傳、監聽上線事件），這裡只檢查題庫，給空的替身就好
+const noop = () => {};
+const sandbox = { window: { addEventListener: noop }, console, String, Object, Math, JSON, RegExp, Array, Set, Map,
+  setTimeout: noop, setInterval: noop, clearTimeout: noop, clearInterval: noop };
 vm.createContext(sandbox);
 for (const f of ['core.js', 'words.js']) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), sandbox, { filename: f });
@@ -120,6 +123,20 @@ for (const sec of SECTIONS) {
   });
 }
 
+// ---------- 英文單字（第 4 關）：只能是小寫 a-z、要有中文意思、不能重複 ----------
+const EN = BANK.english;
+if (!Array.isArray(EN)) errors.push('[english] 這個區塊不存在或不是陣列');
+else {
+  const seenEn = new Set();
+  EN.forEach((entry, idx) => {
+    const where = `english[${idx}] ${entry && entry.text}`;
+    if (!entry || typeof entry.text !== 'string' || !/^[a-z]+$/.test(entry.text)) errors.push(`${where}：text 只能是小寫英文字母`);
+    else if (seenEn.has(entry.text)) warnings.push(`英文單字「${entry.text}」重複`);
+    else seenEn.add(entry.text);
+    if (!entry || typeof entry.zh !== 'string' || !entry.zh.trim()) errors.push(`${where}：缺少中文意思 zh`);
+  });
+}
+
 // ---------- 同字不同音 ----------
 for (const [ch, m] of charZhuyin) {
   if (m.size < 2) continue;
@@ -154,6 +171,7 @@ for (const sec of SECTIONS) {
   L(`  ${sec.padEnd(10)} ${String(n).padStart(4)} 筆`);
 }
 L(`  ${'合計'.padEnd(9)} ${String(total).padStart(4)} 筆`);
+L(`  ${'english'.padEnd(10)} ${String(Array.isArray(EN) ? EN.length : 0).padStart(4)} 筆（英文單字，不列入注音統計）`);
 L('');
 L('注音符號使用次數：');
 for (let i = 0; i < ALL_SYMBOLS.length; i += 10) {
